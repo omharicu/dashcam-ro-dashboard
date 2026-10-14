@@ -282,55 +282,9 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Top KPI Summary Cards
-tot_projects = len(ro_projects)
-tot_length = ro_projects["Length_Km"].sum()
 unique_pius = sorted(list(set(ro_projects["PIU_Clean"].dropna().unique())))
 all_weeks = sorted([int(w) for w in ro_surveys["Survey_Week_Num"].unique() if w > 0])
 latest_week = max(all_weeks) if all_weeks else 1
-
-# Latest week survey status counts
-surveys_latest = ro_surveys[ro_surveys["Survey_Week_Num"] == latest_week]
-completed_latest = len(surveys_latest[surveys_latest["Survey_Status_Clean"] == "Complete"])
-cancelled_latest = len(surveys_latest[surveys_latest["Survey_Status_Clean"] == "Cancelled"])
-pending_latest = len(surveys_latest[surveys_latest["Survey_Status_Clean"].isin(["Scheduled", "Pending"])])
-
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-with kpi1:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-title">Assigned Projects</div>
-        <div class="kpi-value">{tot_projects}</div>
-        <div class="kpi-sub">{len(unique_pius)} PIUs under RO</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with kpi2:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-title">Total Highway Length</div>
-        <div class="kpi-value">{tot_length:,.1f} km</div>
-        <div class="kpi-sub">Jurisdiction stretch</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with kpi3:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-title">Week {latest_week} Completed</div>
-        <div class="kpi-value" style="color: #28a745;">{completed_latest}</div>
-        <div class="kpi-sub">Surveys completed this week</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with kpi4:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-title">Week {latest_week} Exceptions</div>
-        <div class="kpi-value" style="color: {'#dc3545' if cancelled_latest > 0 else '#6c757d'};">{cancelled_latest} Cancelled</div>
-        <div class="kpi-sub">{pending_latest} pending execution</div>
-    </div>
-    """, unsafe_allow_html=True)
 
 # Sidebar Filters
 st.sidebar.header(f"🔍 RO {ro_name} Filters")
@@ -387,6 +341,55 @@ if search_term.strip():
         filtered_projects["UPC Code"].str.lower().str.contains(term, na=False) |
         filtered_projects["NH_Number_Clean"].str.lower().str.contains(term, na=False)
     ]
+
+# Dynamic KPI Summary Cards (Reflects Active Filters)
+card_projects = len(filtered_projects)
+card_length = filtered_projects["Length_Km"].sum()
+card_pius_count = filtered_projects["PIU_Clean"].nunique()
+
+card_completed = len(filtered_surveys[filtered_surveys["Survey_Status_Clean"] == "Complete"])
+card_cancelled = len(filtered_surveys[filtered_surveys["Survey_Status_Clean"] == "Cancelled"])
+card_pending = len(filtered_surveys[filtered_surveys["Survey_Status_Clean"].isin(["Scheduled", "Pending"])])
+
+piu_sub = f"{card_pius_count} PIU(s)" if selected_piu == "All PIUs" else f"PIU: {selected_piu}"
+week_sub = selected_week_str
+
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+with kpi1:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">Projects</div>
+        <div class="kpi-value">{card_projects}</div>
+        <div class="kpi-sub">{piu_sub}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi2:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">Highway Length</div>
+        <div class="kpi-value">{card_length:,.1f} km</div>
+        <div class="kpi-sub">Filtered stretch</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi3:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">Surveys Completed</div>
+        <div class="kpi-value" style="color: #28a745;">{card_completed}</div>
+        <div class="kpi-sub">{week_sub}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi4:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">Exceptions / Pending</div>
+        <div class="kpi-value" style="color: {'#dc3545' if card_cancelled > 0 else '#6c757d'};">{card_cancelled} Cancelled</div>
+        <div class="kpi-sub">{card_pending} pending execution</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Main Workspace Tabs
 tab_surveys, tab_projects, tab_cancellations, tab_export = st.tabs([
