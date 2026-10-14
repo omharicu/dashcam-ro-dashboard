@@ -27,6 +27,20 @@ A zero-cost, hardware-independent web dashboard for the **National Highways Auth
 
 ---
 
+## 5 National Zone Link Directory
+
+Each Zonal CGM / Executive Director has a dedicated link locked strictly to their Zone's projects and Regional Offices:
+
+| Zone | Region / Coverage | Contracted DAS Vendor | Key | Dedicated Link |
+| :---: | :--- | :--- | :---: | :--- |
+| **Zone A** | North *(Chandigarh, Dehradun, Delhi, Jammu, Shimla)* | M/s CMS Computers India Pvt. Ltd. | `ZN-A-8192` | `https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app/?zone=A&key=ZN-A-8192` |
+| **Zone B** | West *(Gandhinagar, Jaipur)* | M/s Amnex Infotechnologies Pvt. Ltd. | `ZN-B-5734` | `https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app/?zone=B&key=ZN-B-5734` |
+| **Zone C** | Central *(Bhopal, Mumbai, Nagpur, Raipur)* | M/s TTL | `ZN-C-9421` | `https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app/?zone=C&key=ZN-C-9421` |
+| **Zone D** | South *(Bengaluru, Chennai, Hyderabad, Madurai, Kerala, Vijayawada)* | M/s Lonrix | `ZN-D-3850` | `https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app/?zone=D&key=ZN-D-3850` |
+| **Zone E** | East *(Bhubaneswar, Guwahati, Kolkata, Patna, Ranchi, UP East, UP West)* | M/s Ador Powertron Ltd. | `ZN-E-6178` | `https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app/?zone=E&key=ZN-E-6178` |
+
+---
+
 ## 24 Regional Office Link Directory
 
 When deployed to Streamlit Cloud, replace `http://localhost:8501` with your public Streamlit URL (e.g. `https://nhai-dashcam.streamlit.app`):

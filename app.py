@@ -88,9 +88,12 @@ query_params = st.query_params
 ro_param = query_params.get("ro", None)
 key_param = query_params.get("key", None)
 admin_param = query_params.get("admin", None)
+zone_param = query_params.get("zone", None)
 
 # Validate access
-is_valid, role, ro_canonical = tokens.validate_access(ro_param, key_param, admin_param)
+is_valid, role, ro_canonical, zone_canonical = tokens.validate_access(
+    ro_param=ro_param, key_param=key_param, admin_param=admin_param, zone_param=zone_param
+)
 
 # Auto-sync cache every 15 minutes (900 seconds) from live Google Sheet
 @st.cache_data(ttl=900)
@@ -128,6 +131,20 @@ def to_excel_download(df):
     return output.getvalue()
 
 
+# Helper to get base URL
+def get_base_url():
+    base_url = "https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app"
+    try:
+        if hasattr(st, "context") and hasattr(st.context, "headers") and st.context.headers:
+            host = st.context.headers.get("Host") or st.context.headers.get("host")
+            if host:
+                proto = "http" if ("localhost" in host or "127.0.0.1" in host) else "https"
+                base_url = f"{proto}://{host}"
+    except Exception:
+        pass
+    return base_url
+
+
 # =========================================================================
 # VIEW 1: UNAUTHORIZED / LOGIN GATE
 # =========================================================================
@@ -142,23 +159,43 @@ if not is_valid:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.warning("🔒 **Restricted Access Portal**")
-        st.info("Each Regional Office (RO) has a dedicated access link to view their projects. Please use the personalized link provided to your RO.")
+        st.info("Each Regional Office (RO) and Zone has a dedicated access link to view their projects. Please use the personalized link provided to your office.")
         
         with st.expander("🔑 Direct Key / Admin Access", expanded=True):
-            input_ro = st.selectbox("Select Your Regional Office", ["-- Select RO --"] + sorted(list(tokens.RO_TOKENS.keys())))
-            input_key = st.text_input("Enter RO Access Key or Admin Key", type="password")
+            access_level = st.radio("Select Portal Level", ["Regional Office (RO)", "National Zone", "Head Office Admin"], horizontal=True)
             
-            if st.button("Access Dashboard", use_container_width=True):
-                if input_key == tokens.ADMIN_KEY:
-                    st.query_params["admin"] = "true"
-                    st.query_params["key"] = input_key
-                    st.rerun()
-                elif input_ro in tokens.RO_TOKENS and tokens.RO_TOKENS[input_ro].upper() == input_key.strip().upper():
-                    st.query_params["ro"] = input_ro
-                    st.query_params["key"] = input_key
-                    st.rerun()
-                else:
-                    st.error("Invalid RO or Access Key. Please check with NHAI Head Office.")
+            if access_level == "Regional Office (RO)":
+                input_ro = st.selectbox("Select Regional Office", ["-- Select RO --"] + sorted(list(tokens.RO_TOKENS.keys())))
+                input_key = st.text_input("Enter RO Access Key", type="password")
+                if st.button("Access RO Dashboard", use_container_width=True):
+                    if input_ro in tokens.RO_TOKENS and tokens.RO_TOKENS[input_ro].upper() == input_key.strip().upper():
+                        st.query_params["ro"] = input_ro
+                        st.query_params["key"] = input_key
+                        st.rerun()
+                    else:
+                        st.error("Invalid RO or Access Key.")
+                        
+            elif access_level == "National Zone":
+                zone_choices = ["-- Select Zone --"] + [f"Zone {z} - {tokens.ZONE_INFO[z]['name']}" for z in sorted(tokens.ZONE_TOKENS.keys())]
+                input_zone = st.selectbox("Select Zone", zone_choices)
+                input_key = st.text_input("Enter Zone Access Key", type="password")
+                if st.button("Access Zonal Dashboard", use_container_width=True):
+                    z_code = input_zone.split()[1] if input_zone != "-- Select Zone --" else ""
+                    if z_code in tokens.ZONE_TOKENS and tokens.ZONE_TOKENS[z_code].upper() == input_key.strip().upper():
+                        st.query_params["zone"] = z_code
+                        st.query_params["key"] = input_key
+                        st.rerun()
+                    else:
+                        st.error("Invalid Zone or Access Key.")
+            else:
+                input_key = st.text_input("Enter Head Office Admin Key", type="password")
+                if st.button("Access Admin Hub", use_container_width=True):
+                    if input_key == tokens.ADMIN_KEY:
+                        st.query_params["admin"] = "true"
+                        st.query_params["key"] = input_key
+                        st.rerun()
+                    else:
+                        st.error("Invalid Admin Key.")
     st.stop()
 
 
@@ -169,37 +206,63 @@ if role == "admin":
     st.markdown("""
     <div class="main-header">
         <h1>🛣️ NHAI Head Office - Master Administration Hub</h1>
-        <p>Dashcam Survey System Monitoring & Regional Office Link Directory</p>
+        <p>Dashcam Survey System Monitoring & Regional / Zonal Office Link Directory</p>
     </div>
     """, unsafe_allow_html=True)
     
-    admin_tab1, admin_tab2, admin_tab3 = st.tabs([
-        "🔗 24 RO Dedicated Links Directory", 
+    admin_tab1, admin_tab2, admin_tab3, admin_tab4 = st.tabs([
+        "🌐 5 Zone Dedicated Links",
+        "📍 24 RO Dedicated Links", 
         "🔄 Live Google Sheet Sync", 
         "📊 All-RO Operational Overview"
     ])
     
+    base_url = get_base_url()
+
     with admin_tab1:
-        st.subheader("Regional Office Access Links")
+        st.subheader("National Zone Access Links (5 Zones)")
+        st.write("Share each personalized link with the respective Zonal CGMs and Executive Directors. Each link is hard-locked to that Zone's projects and Regional Offices.")
+        
+        zone_rows = []
+        for z_code, z_key in sorted(tokens.ZONE_TOKENS.items()):
+            z_meta = tokens.ZONE_INFO[z_code]
+            z_proj_count = len(df_projects[df_projects["Zone"] == z_code])
+            z_km = df_projects[df_projects["Zone"] == z_code]["Length_Km"].sum()
+            full_link = f"{base_url}/?zone={z_code}&key={z_key}"
+            zone_rows.append({
+                "Zone": f"Zone {z_code}",
+                "Zone Name": z_meta["name"],
+                "Contracted DAS Vendor": z_meta["vendor"],
+                "ROs Covered": ", ".join(z_meta["ros"]),
+                "Projects": z_proj_count,
+                "Length (Km)": f"{z_km:.1f}",
+                "Access Key": z_key,
+                "Direct Link": full_link
+            })
+            
+        df_zone_links = pd.DataFrame(zone_rows)
+        st.dataframe(
+            df_zone_links,
+            column_config={
+                "Direct Link": st.column_config.LinkColumn("Click to Open Zone View", display_text="Open Zone Portal")
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+        csv_z = df_zone_links.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Zone Links (CSV)", csv_z, "NHAI_Zone_Portal_Links.csv", "text/csv")
+
+    with admin_tab2:
+        st.subheader("Regional Office Access Links (24 ROs)")
         st.write("Share each personalized link with the respective RO Chief General Manager / Project Directors. Each link is hard-locked to that RO's projects only.")
         
-        # Build links table with dynamic host detection
-        base_url = "https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app"
-        try:
-            if hasattr(st, "context") and hasattr(st.context, "headers") and st.context.headers:
-                host = st.context.headers.get("Host") or st.context.headers.get("host")
-                if host:
-                    proto = "http" if ("localhost" in host or "127.0.0.1" in host) else "https"
-                    base_url = f"{proto}://{host}"
-        except Exception:
-            pass
         ro_rows = []
-        for ro_name, key in sorted(tokens.RO_TOKENS.items()):
-            ro_proj_count = len(df_projects[df_projects["RO_Clean"] == ro_name])
-            ro_km = df_projects[df_projects["RO_Clean"] == ro_name]["Length_Km"].sum()
-            full_link = f"{base_url}/?ro={ro_name.replace(' ', '+')}&key={key}"
+        for ro_name_key, key in sorted(tokens.RO_TOKENS.items()):
+            ro_proj_count = len(df_projects[df_projects["RO_Clean"] == ro_name_key])
+            ro_km = df_projects[df_projects["RO_Clean"] == ro_name_key]["Length_Km"].sum()
+            full_link = f"{base_url}/?ro={ro_name_key.replace(' ', '+')}&key={key}"
             ro_rows.append({
-                "Regional Office": f"RO {ro_name}",
+                "Regional Office": f"RO {ro_name_key}",
                 "Projects": ro_proj_count,
                 "Total Length (Km)": f"{ro_km:.1f}",
                 "Access Key": key,
@@ -207,8 +270,6 @@ if role == "admin":
             })
         
         df_ro_links = pd.DataFrame(ro_rows)
-        
-        # Display as table
         st.dataframe(
             df_ro_links,
             column_config={
@@ -217,12 +278,10 @@ if role == "admin":
             hide_index=True,
             use_container_width=True
         )
+        csv_ro = df_ro_links.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download RO Links (CSV)", csv_ro, "NHAI_RO_Portal_Links.csv", "text/csv")
         
-        # Download directory
-        csv = df_ro_links.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Link Directory (CSV)", csv, "NHAI_RO_Portal_Links.csv", "text/csv")
-        
-    with admin_tab2:
+    with admin_tab3:
         st.subheader("Live Google Sheet Connection (View-Only)")
         st.write("Enter the URL or Spreadsheet ID of the view-only Google Sheet to sync the latest weekly records.")
         
@@ -253,7 +312,7 @@ if role == "admin":
                 st.success("Local data reloaded!")
                 st.rerun()
 
-    with admin_tab3:
+    with admin_tab4:
         st.subheader("National Overview Across 24 ROs")
         ro_summary = df_projects.groupby("RO_Clean").agg(
             Projects=("UPC Code", "count"),
@@ -266,33 +325,53 @@ if role == "admin":
 
 
 # =========================================================================
-# VIEW 3: STRICT RO-LEVEL OPERATIONAL DASHBOARD
+# VIEW 3: STRICT OPERATIONAL DASHBOARD (RO OR ZONE LEVEL)
 # =========================================================================
 
-# Strict query isolation: RO can ONLY see their own data
-ro_name = ro_canonical if ro_canonical else ""
-ro_projects = df_projects[df_projects["RO_Clean"] == ro_name].copy() if ro_name else pd.DataFrame()
-ro_surveys = df_surveys[df_surveys["RO_Clean"] == ro_name].copy() if ro_name else pd.DataFrame()
+is_zone = (role == "zone")
+scope_zone = zone_canonical if is_zone else None
+ro_name = ro_canonical if not is_zone else None
+
+if is_zone:
+    zone_info = tokens.ZONE_INFO.get(scope_zone, {})
+    portal_title = f"Zone {scope_zone} - {zone_info.get('name', '')}"
+    portal_subtitle = f"Contracted DAS Vendor: {zone_info.get('vendor', 'N/A')} | Highway Dashcam Survey & Project Tracking System"
+    scope_projects = df_projects[df_projects["Zone"] == scope_zone].copy()
+    scope_surveys = df_surveys[df_surveys["Zone"] == scope_zone].copy()
+else:
+    portal_title = f"Regional Office: {ro_name.upper() if ro_name else 'PORTAL'}"
+    portal_subtitle = "Highway Dashcam Survey & Project Tracking System"
+    scope_projects = df_projects[df_projects["RO_Clean"] == ro_name].copy() if ro_name else pd.DataFrame()
+    scope_surveys = df_surveys[df_surveys["RO_Clean"] == ro_name].copy() if ro_name else pd.DataFrame()
 
 # Header
 st.markdown(f"""
 <div class="main-header">
-    <h1>🛣️ NHAI Regional Office: {ro_name.upper() if ro_name else 'PORTAL'}</h1>
-    <p>Highway Dashcam Survey & Project Tracking System</p>
+    <h1>🛣️ NHAI {portal_title}</h1>
+    <p>{portal_subtitle}</p>
 </div>
 """, unsafe_allow_html=True)
 
-unique_pius = sorted(list(set(ro_projects["PIU_Clean"].dropna().unique())))
-all_weeks = sorted([int(w) for w in ro_surveys["Survey_Week_Num"].unique() if w > 0])
-latest_week = max(all_weeks) if all_weeks else 1
-
 # Sidebar Filters
-st.sidebar.header(f"🔍 RO {ro_name} Filters")
+sidebar_title = f"🔍 Zone {scope_zone} Filters" if is_zone else f"🔍 RO {ro_name} Filters"
+st.sidebar.header(sidebar_title)
+
+# If Zone view, allow filtering by RO within that zone
+selected_ro = "All ROs"
+if is_zone:
+    zone_ros = sorted(list(scope_projects["RO_Clean"].dropna().unique()))
+    selected_ro = st.sidebar.selectbox("Filter by Regional Office (RO)", ["All ROs in Zone"] + zone_ros)
+    if selected_ro != "All ROs in Zone":
+        scope_projects = scope_projects[scope_projects["RO_Clean"] == selected_ro]
+        scope_surveys = scope_surveys[scope_surveys["RO_Clean"] == selected_ro]
 
 # PIU Filter
+unique_pius = sorted(list(set(scope_projects["PIU_Clean"].dropna().unique())))
 selected_piu = st.sidebar.selectbox("Filter by PIU", ["All PIUs"] + unique_pius)
 
 # Week Filter
+all_weeks = sorted([int(w) for w in scope_surveys["Survey_Week_Num"].unique() if w > 0])
+latest_week = max(all_weeks) if all_weeks else 1
 week_options = ["All Weeks", f"Latest (Week {latest_week})"] + [f"Week {w}" for w in sorted(all_weeks, reverse=True)]
 selected_week_str = st.sidebar.selectbox("Select Survey Week", week_options, index=1 if latest_week else 0)
 
@@ -304,7 +383,7 @@ selected_status = st.sidebar.selectbox("Survey Status", status_options)
 search_term = st.sidebar.text_input("Search (NH, Project, UPC)", "")
 
 # Apply Filters to Surveys
-filtered_surveys = ro_surveys.copy()
+filtered_surveys = scope_surveys.copy()
 
 if selected_piu != "All PIUs":
     filtered_surveys = filtered_surveys[filtered_surveys["PIU_Clean"] == selected_piu]
@@ -331,7 +410,7 @@ if search_term.strip():
     ]
 
 # Apply Filters to Projects Master
-filtered_projects = ro_projects.copy()
+filtered_projects = scope_projects.copy()
 if selected_piu != "All PIUs":
     filtered_projects = filtered_projects[filtered_projects["PIU_Clean"] == selected_piu]
 if search_term.strip():
@@ -351,7 +430,11 @@ card_completed = len(filtered_surveys[filtered_surveys["Survey_Status_Clean"] ==
 card_cancelled = len(filtered_surveys[filtered_surveys["Survey_Status_Clean"] == "Cancelled"])
 card_pending = len(filtered_surveys[filtered_surveys["Survey_Status_Clean"].isin(["Scheduled", "Pending"])])
 
-piu_sub = f"{card_pius_count} PIU(s)" if selected_piu == "All PIUs" else f"PIU: {selected_piu}"
+if is_zone and selected_ro == "All ROs in Zone":
+    scope_sub = f"{len(scope_projects['RO_Clean'].unique())} ROs | {card_pius_count} PIUs"
+else:
+    scope_sub = f"{card_pius_count} PIU(s)" if selected_piu == "All PIUs" else f"PIU: {selected_piu}"
+
 week_sub = selected_week_str
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
@@ -360,7 +443,7 @@ with kpi1:
     <div class="kpi-card">
         <div class="kpi-title">Projects</div>
         <div class="kpi-value">{card_projects}</div>
-        <div class="kpi-sub">{piu_sub}</div>
+        <div class="kpi-sub">{scope_sub}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -392,18 +475,27 @@ with kpi4:
     """, unsafe_allow_html=True)
 
 # Main Workspace Tabs
-tab_surveys, tab_projects, tab_cancellations, tab_export = st.tabs([
-    f"📋 Weekly Survey Status ({len(filtered_surveys)})",
-    f"🛣️ Project Master Inventory ({len(filtered_projects)})",
-    f"⚠️ Cancellations & Issues",
-    "📥 Export for Review Meetings"
-])
+if is_zone:
+    tab_surveys, tab_ro_breakdown, tab_projects, tab_cancellations, tab_export = st.tabs([
+        f"📋 Weekly Survey Status ({len(filtered_surveys)})",
+        f"🏢 RO Performance Breakdown",
+        f"🛣️ Project Master Inventory ({len(filtered_projects)})",
+        f"⚠️ Cancellations & Issues",
+        "📥 Export for Review Meetings"
+    ])
+else:
+    tab_surveys, tab_projects, tab_cancellations, tab_export = st.tabs([
+        f"📋 Weekly Survey Status ({len(filtered_surveys)})",
+        f"🛣️ Project Master Inventory ({len(filtered_projects)})",
+        f"⚠️ Cancellations & Issues",
+        "📥 Export for Review Meetings"
+    ])
 
 # -------------------------------------------------------------------------
 # TAB 1: WEEKLY SURVEY TRACKER
 # -------------------------------------------------------------------------
 with tab_surveys:
-    st.subheader(f"Survey Status Tracker - RO {ro_name}")
+    st.subheader(f"Survey Status Tracker - {portal_title}")
     st.caption(f"Showing {len(filtered_surveys)} survey records based on current filters.")
     
     if filtered_surveys.empty:
@@ -411,7 +503,7 @@ with tab_surveys:
     else:
         # Prepare clean display table defensively
         survey_cols = [
-            "UPC Code", "Project Name", "PIU_Clean", "Survey_Week_Num", 
+            "UPC Code", "Project Name", "RO_Clean", "PIU_Clean", "Survey_Week_Num", 
             "Survey_Status_Clean", "Remarks_Clean", "Scheduled_Date", "Actual_Date",
             "Delay_D1", "Raw_Video_Link", "Processed_Video_Link", "Actual_Report_Link"
         ]
@@ -422,11 +514,15 @@ with tab_surveys:
         display_surveys = filtered_surveys[survey_cols].copy()
         
         display_surveys.columns = [
-            "UPC Code", "Project Name", "PIU", "Week", 
+            "UPC Code", "Project Name", "RO", "PIU", "Week", 
             "Status", "Remarks / Cancellation Reason", "Scheduled Date", "Completed Date", 
             "Delay (Days)", "Raw Video", "Processed Video", "Survey Report"
         ]
         
+        # If single RO, drop RO column for brevity
+        if not is_zone or selected_ro != "All ROs in Zone":
+            display_surveys = display_surveys.drop(columns=["RO"])
+            
         st.dataframe(
             display_surveys,
             column_config={
@@ -441,21 +537,64 @@ with tab_surveys:
         )
 
 # -------------------------------------------------------------------------
-# TAB 2: PROJECT MASTER INVENTORY
+# TAB: RO BREAKDOWN (ZONE VIEW ONLY)
+# -------------------------------------------------------------------------
+if is_zone:
+    with tab_ro_breakdown:
+        st.subheader(f"Regional Office Performance Comparison - Zone {scope_zone}")
+        st.caption(f"Comparison across all Regional Offices in {zone_info.get('name')}.")
+        
+        ro_stats = []
+        for r_name in sorted(scope_projects["RO_Clean"].unique()):
+            r_projs = scope_projects[scope_projects["RO_Clean"] == r_name]
+            r_survs = scope_surveys[scope_surveys["RO_Clean"] == r_name]
+            
+            p_cnt = len(r_projs)
+            km_tot = r_projs["Length_Km"].sum()
+            surv_tot = len(r_survs)
+            comp_cnt = len(r_survs[r_survs["Survey_Status_Clean"] == "Complete"])
+            canc_cnt = len(r_survs[r_survs["Survey_Status_Clean"] == "Cancelled"])
+            pend_cnt = len(r_survs[r_survs["Survey_Status_Clean"].isin(["Scheduled", "Pending"])])
+            comp_pct = (comp_cnt / surv_tot * 100) if surv_tot > 0 else 0
+            
+            ro_stats.append({
+                "Regional Office": f"RO {r_name}",
+                "Projects": p_cnt,
+                "Length (km)": f"{km_tot:,.1f}",
+                "Total Scheduled Surveys": surv_tot,
+                "Completed Surveys": comp_cnt,
+                "Completion Rate": f"{comp_pct:.1f}%",
+                "Cancelled": canc_cnt,
+                "Pending / Scheduled": pend_cnt
+            })
+            
+        df_ro_stats = pd.DataFrame(ro_stats)
+        st.dataframe(df_ro_stats, hide_index=True, use_container_width=True)
+
+# -------------------------------------------------------------------------
+# TAB: PROJECT MASTER INVENTORY
 # -------------------------------------------------------------------------
 with tab_projects:
-    st.subheader(f"Project Master Directory - RO {ro_name}")
-    st.caption(f"Total {len(filtered_projects)} projects registered under {ro_name}.")
+    st.subheader(f"Project Master Directory - {portal_title}")
+    st.caption(f"Total {len(filtered_projects)} projects registered.")
     
-    display_p = filtered_projects[[
-        "UPC Code", "Project_Name_Clean", "NH_Number_Clean", "PIU_Clean", 
+    proj_cols = [
+        "UPC Code", "Project_Name_Clean", "NH_Number_Clean", "RO_Clean", "PIU_Clean", 
         "Length_Km", "Lanes", "Mode_Clean", "Contractor", "AE_IE"
-    ]].copy()
+    ]
+    for c in proj_cols:
+        if c not in filtered_projects.columns:
+            filtered_projects[c] = ""
+            
+    display_p = filtered_projects[proj_cols].copy()
     display_p.columns = [
-        "UPC Code", "Project Name", "NH Number", "PIU", 
+        "UPC Code", "Project Name", "NH Number", "RO", "PIU", 
         "Length (km)", "Lanes", "Mode", "Contractor / Concessionaire", "Consultant (AE/IE)"
     ]
     
+    if not is_zone or selected_ro != "All ROs in Zone":
+        display_p = display_p.drop(columns=["RO"])
+        
     st.dataframe(
         display_p,
         column_config={
@@ -466,7 +605,7 @@ with tab_projects:
     )
 
 # -------------------------------------------------------------------------
-# TAB 3: CANCELLATIONS & FIELD ISSUES
+# TAB: CANCELLATIONS & FIELD ISSUES
 # -------------------------------------------------------------------------
 with tab_cancellations:
     st.subheader("Survey Cancellations & Field Bottlenecks")
@@ -478,28 +617,37 @@ with tab_cancellations:
         st.warning(f"Found {len(cancelled_df)} cancelled survey legs.")
         
         st.write("**Affected Stretches & Cancellation Details**")
+        canc_cols = ["UPC Code", "Project Name", "RO_Clean", "PIU_Clean", "Survey_Week_Num", "Remarks_Clean"]
+        for c in canc_cols:
+            if c not in cancelled_df.columns:
+                cancelled_df[c] = ""
+                
+        disp_canc = cancelled_df[canc_cols].copy()
+        disp_canc.columns = ["UPC Code", "Project Name", "RO", "PIU", "Week", "Reason / Remarks"]
+        if not is_zone or selected_ro != "All ROs in Zone":
+            disp_canc = disp_canc.drop(columns=["RO"])
+            
         st.dataframe(
-            cancelled_df[["UPC Code", "Project Name", "PIU_Clean", "Survey_Week_Num", "Remarks_Clean"]].rename(
-                columns={"PIU_Clean": "PIU", "Survey_Week_Num": "Week", "Remarks_Clean": "Reason / Remarks"}
-            ),
+            disp_canc,
             hide_index=True,
             use_container_width=True
         )
 
 # -------------------------------------------------------------------------
-# TAB 4: EXPORT FOR REVIEW MEETINGS
+# TAB: EXPORT FOR REVIEW MEETINGS
 # -------------------------------------------------------------------------
 with tab_export:
-    st.subheader("📥 Export Data for RO Weekly Review Meetings")
-    st.write("Generate an Excel or CSV report containing the filtered projects and survey status for review with PIUs and Concessionaires.")
+    st.subheader("📥 Export Data for Review Meetings")
+    st.write("Generate an Excel or CSV report containing the filtered projects and survey status for review.")
     
     col_e1, col_e2 = st.columns(2)
     with col_e1:
         excel_bytes = to_excel_download(filtered_surveys)
+        export_tag = f"Zone_{scope_zone}" if is_zone else f"RO_{ro_name}"
         st.download_button(
             label="📊 Download Survey Status (Excel .xlsx)",
             data=excel_bytes,
-            file_name=f"NHAI_RO_{ro_name}_Survey_Report_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
+            file_name=f"NHAI_{export_tag}_Survey_Report_{datetime.date.today().strftime('%d_%m_%Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
@@ -508,7 +656,7 @@ with tab_export:
         st.download_button(
             label="📄 Download Survey Status (CSV)",
             data=csv_bytes,
-            file_name=f"NHAI_RO_{ro_name}_Survey_Report_{datetime.date.today().strftime('%d_%m_%Y')}.csv",
+            file_name=f"NHAI_{export_tag}_Survey_Report_{datetime.date.today().strftime('%d_%m_%Y')}.csv",
             mime="text/csv",
             use_container_width=True
         )
@@ -526,6 +674,6 @@ if st.sidebar.button("🔄 Sync Latest Sheet Updates", use_container_width=True)
     st.success("Synced!")
     st.rerun()
 
-st.sidebar.caption(f"🔒 Session locked to RO: **{ro_name}**")
+session_scope = f"Zone: **Zone {scope_zone}**" if is_zone else f"RO: **{ro_name}**"
+st.sidebar.caption(f"🔒 Session locked to {session_scope}")
 st.sidebar.caption("NHAI Dashcam Monitoring System v1.0")
-
