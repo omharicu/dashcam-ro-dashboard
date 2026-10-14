@@ -385,13 +385,13 @@ with tab_surveys:
         display_surveys = filtered_surveys[[
             "UPC Code", "Project Name", "PIU_Clean", "Survey_Week_Num", 
             "Survey_Status_Clean", "Remarks_Clean", "Scheduled_Date", "Actual_Date",
-            "Delay_D1", "Raw_Video_Link", "Processed_Video_Link", "Final_Report_Link"
+            "Delay_D1", "Raw_Video_Link", "Processed_Video_Link", "Actual_Report_Link"
         ]].copy()
         
         display_surveys.columns = [
             "UPC Code", "Project Name", "PIU", "Week", 
             "Status", "Remarks / Cancellation Reason", "Scheduled Date", "Completed Date", 
-            "Delay (Days)", "Raw Video", "Processed Video", "Final Report"
+            "Delay (Days)", "Raw Video", "Processed Video", "Survey Report"
         ]
         
         st.dataframe(
@@ -399,7 +399,7 @@ with tab_surveys:
             column_config={
                 "Raw Video": st.column_config.LinkColumn("Raw Video", display_text="📹 Watch Video"),
                 "Processed Video": st.column_config.LinkColumn("Processed Video", display_text="🎥 AI Viewer"),
-                "Final Report": st.column_config.LinkColumn("Survey Report", display_text="📄 View Report"),
+                "Survey Report": st.column_config.LinkColumn("Survey Report", display_text="📄 View Report"),
                 "Week": st.column_config.NumberColumn(format="%d"),
                 "Delay (Days)": st.column_config.NumberColumn(format="%d d")
             },

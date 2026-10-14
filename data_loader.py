@@ -132,8 +132,19 @@ def parse_workbook(wb_or_file):
     df_m["Processed_Video_Link"] = df_m.get("Processed Video Link", pd.Series([""]*len(df_m))).apply(clean_str)
     df_m["Survey_Report_Link"] = df_m.get("Original Survey Report Link", pd.Series([""]*len(df_m))).apply(clean_str)
     df_m["Final_Report_Link"] = df_m.get("Final Survey Report Link", pd.Series([""]*len(df_m))).apply(clean_str)
+    df_m["Assessed_Report_Link"] = df_m.get("Assessed Report Link", pd.Series([""]*len(df_m))).apply(clean_str)
     df_m["Survey_Form_Link"] = df_m.get("Survey Form Link", pd.Series([""]*len(df_m))).apply(clean_str)
     df_m["Discrepancy_Doc"] = df_m.get("Discrepancy  Document", pd.Series([""]*len(df_m))).apply(clean_str)
+
+    # Actual Report Link: Pick Original Survey Report Link, or Final Report Link, or Assessed Report Link
+    def pick_actual_report(r):
+        for col in ["Original Survey Report Link", "Final Survey Report Link", "Assessed Report Link"]:
+            val = str(r.get(col, "")).strip()
+            if val and val.lower() not in ["none", "nan", "n/a", ""] and val.startswith("http"):
+                return val
+        return ""
+
+    df_m["Actual_Report_Link"] = df_m.apply(pick_actual_report, axis=1)
 
     # Delays and quality
     df_m["Delay_D1"] = pd.to_numeric(df_m.get("Delay D1 (Days)"), errors="coerce").fillna(0).astype(int)
