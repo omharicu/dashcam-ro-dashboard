@@ -2,8 +2,12 @@ import streamlit as st
 import pandas as pd
 import datetime
 import io
+import importlib
 import data_loader
 import tokens
+
+importlib.reload(data_loader)
+importlib.reload(tokens)
 
 # Set page config
 st.set_page_config(
@@ -91,9 +95,16 @@ admin_param = query_params.get("admin", None)
 zone_param = query_params.get("zone", None)
 
 # Validate access
-is_valid, role, ro_canonical, zone_canonical = tokens.validate_access(
+res = tokens.validate_access(
     ro_param=ro_param, key_param=key_param, admin_param=admin_param, zone_param=zone_param
 )
+if isinstance(res, (tuple, list)) and len(res) >= 4:
+    is_valid, role, ro_canonical, zone_canonical = res[:4]
+elif isinstance(res, (tuple, list)) and len(res) == 3:
+    is_valid, role, ro_canonical = res
+    zone_canonical = None
+else:
+    is_valid, role, ro_canonical, zone_canonical = False, "unauthorized", None, None
 
 # Auto-sync cache every 15 minutes (900 seconds) from live Google Sheet
 @st.cache_data(ttl=900)

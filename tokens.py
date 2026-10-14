@@ -84,7 +84,7 @@ SLUG_TO_RO = {
     "vijayawada": "Vijayawada",
 }
 
-def validate_access(ro_param: str = None, key_param: str = None, admin_param: str = None, zone_param: str = None):
+def validate_access(ro_param: str = None, key_param: str = None, admin_param: str = None, zone_param: str = None, **kwargs):
     """
     Validates query parameters.
     Returns:
