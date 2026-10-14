@@ -106,6 +106,20 @@ except Exception as e:
     st.error(f"Error loading project data: {e}")
     st.stop()
 
+# Ensure required columns exist even if loaded from an older cache
+if "Actual_Report_Link" not in df_surveys.columns:
+    def pick_report(r):
+        for col in ["Original Survey Report Link", "Final Survey Report Link", "Assessed Report Link", "Final_Report_Link", "Survey_Report_Link"]:
+            val = str(r.get(col, "")).strip()
+            if val and val.lower() not in ["none", "nan", "n/a", ""] and val.startswith("http"):
+                return val
+        return ""
+    df_surveys["Actual_Report_Link"] = df_surveys.apply(pick_report, axis=1)
+
+for col in ["Raw_Video_Link", "Processed_Video_Link", "Actual_Report_Link", "Delay_D1"]:
+    if col not in df_surveys.columns:
+        df_surveys[col] = ""
+
 # Helper for export
 def to_excel_download(df):
     output = io.BytesIO()
@@ -248,14 +262,14 @@ if role == "admin":
 # =========================================================================
 
 # Strict query isolation: RO can ONLY see their own data
-ro_name = ro_canonical
-ro_projects = df_projects[df_projects["RO_Clean"] == ro_name].copy()
-ro_surveys = df_surveys[df_surveys["RO_Clean"] == ro_name].copy()
+ro_name = ro_canonical if ro_canonical else ""
+ro_projects = df_projects[df_projects["RO_Clean"] == ro_name].copy() if ro_name else pd.DataFrame()
+ro_surveys = df_surveys[df_surveys["RO_Clean"] == ro_name].copy() if ro_name else pd.DataFrame()
 
 # Header
 st.markdown(f"""
 <div class="main-header">
-    <h1>🛣️ NHAI Regional Office: {ro_name.upper()}</h1>
+    <h1>🛣️ NHAI Regional Office: {ro_name.upper() if ro_name else 'PORTAL'}</h1>
     <p>Official Highway Dashcam Survey & Project Tracking System</p>
 </div>
 """, unsafe_allow_html=True)
@@ -384,12 +398,17 @@ with tab_surveys:
     if filtered_surveys.empty:
         st.info("No survey records match the selected filters.")
     else:
-        # Prepare clean display table
-        display_surveys = filtered_surveys[[
+        # Prepare clean display table defensively
+        survey_cols = [
             "UPC Code", "Project Name", "PIU_Clean", "Survey_Week_Num", 
             "Survey_Status_Clean", "Remarks_Clean", "Scheduled_Date", "Actual_Date",
             "Delay_D1", "Raw_Video_Link", "Processed_Video_Link", "Actual_Report_Link"
-        ]].copy()
+        ]
+        for c in survey_cols:
+            if c not in filtered_surveys.columns:
+                filtered_surveys[c] = ""
+                
+        display_surveys = filtered_surveys[survey_cols].copy()
         
         display_surveys.columns = [
             "UPC Code", "Project Name", "PIU", "Week", 
