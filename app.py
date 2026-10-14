@@ -278,7 +278,7 @@ ro_surveys = df_surveys[df_surveys["RO_Clean"] == ro_name].copy() if ro_name els
 st.markdown(f"""
 <div class="main-header">
     <h1>🛣️ NHAI Regional Office: {ro_name.upper() if ro_name else 'PORTAL'}</h1>
-    <p>Official Highway Dashcam Survey & Project Tracking System</p>
+    <p>Highway Dashcam Survey & Project Tracking System</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -477,7 +477,7 @@ with tab_cancellations:
         st.write("**Affected Stretches & Cancellation Details**")
         st.dataframe(
             cancelled_df[["UPC Code", "Project Name", "PIU_Clean", "Survey_Week_Num", "Remarks_Clean"]].rename(
-                columns={"PIU_Clean": "PIU", "Survey_Week_Num": "Week", "Remarks_Clean": "Official Reason"}
+                columns={"PIU_Clean": "PIU", "Survey_Week_Num": "Week", "Remarks_Clean": "Reason / Remarks"}
             ),
             hide_index=True,
             use_container_width=True
@@ -488,7 +488,7 @@ with tab_cancellations:
 # -------------------------------------------------------------------------
 with tab_export:
     st.subheader("📥 Export Data for RO Weekly Review Meetings")
-    st.write("Generate an official Excel or CSV report containing the filtered projects and survey status for review with PIUs and Concessionaires.")
+    st.write("Generate an Excel or CSV report containing the filtered projects and survey status for review with PIUs and Concessionaires.")
     
     col_e1, col_e2 = st.columns(2)
     with col_e1:
