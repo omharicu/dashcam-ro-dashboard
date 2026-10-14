@@ -187,8 +187,29 @@ def sync_data(gsheet_url_or_id=DEFAULT_GSHEET_URL, force_reload=False):
 
     df_p.to_parquet(PROJECTS_CACHE, index=False)
     df_m.to_parquet(SURVEYS_CACHE, index=False)
-    print(f"Successfully cached {len(df_p)} projects and {len(df_m)} survey records.")
+    
+    # Save sync timestamp
+    now_str = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
+    try:
+        import json
+        with open(META_CACHE, "w") as f:
+            json.dump({"last_sync": now_str}, f)
+    except Exception:
+        pass
+
+    print(f"Successfully cached {len(df_p)} projects and {len(df_m)} survey records at {now_str}.")
     return df_p, df_m
+
+def get_last_sync_time():
+    try:
+        import json
+        if os.path.exists(META_CACHE):
+            with open(META_CACHE, "r") as f:
+                data = json.load(f)
+                return data.get("last_sync", "")
+    except Exception:
+        pass
+    return ""
 
 def load_cached_data():
     """

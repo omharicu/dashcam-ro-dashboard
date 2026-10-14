@@ -92,10 +92,13 @@ admin_param = query_params.get("admin", None)
 # Validate access
 is_valid, role, ro_canonical = tokens.validate_access(ro_param, key_param, admin_param)
 
-# Load data (cached)
-@st.cache_data(ttl=3600)
+# Auto-sync cache every 15 minutes (900 seconds) from live Google Sheet
+@st.cache_data(ttl=900)
 def get_data():
-    return data_loader.load_cached_data()
+    try:
+        return data_loader.sync_data(force_reload=True)
+    except Exception as e:
+        return data_loader.load_cached_data()
 
 try:
     df_projects, df_surveys = get_data()
@@ -482,6 +485,17 @@ with tab_export:
 
 # Footer
 st.sidebar.markdown("---")
+last_sync = data_loader.get_last_sync_time()
+if last_sync:
+    st.sidebar.caption(f"🕒 **Last Synced**: {last_sync}")
+
+if st.sidebar.button("🔄 Sync Latest Sheet Updates", use_container_width=True):
+    with st.spinner("Fetching latest updates from Google Sheet..."):
+        st.cache_data.clear()
+        get_data()
+    st.success("Synced!")
+    st.rerun()
+
 st.sidebar.caption(f"🔒 Session locked to RO: **{ro_name}**")
 st.sidebar.caption("NHAI Dashcam Monitoring System v1.0")
 
