@@ -183,8 +183,16 @@ if role == "admin":
         st.subheader("Regional Office Access Links")
         st.write("Share each personalized link with the respective RO Chief General Manager / Project Directors. Each link is hard-locked to that RO's projects only.")
         
-        # Build links table
-        base_url = "http://localhost:8501"  # Or deployed URL
+        # Build links table with dynamic host detection
+        base_url = "https://dashcam-ro-dashboard-jqvfjynvuyc3djjrxadogf.streamlit.app"
+        try:
+            if hasattr(st, "context") and hasattr(st.context, "headers") and st.context.headers:
+                host = st.context.headers.get("Host") or st.context.headers.get("host")
+                if host:
+                    proto = "http" if ("localhost" in host or "127.0.0.1" in host) else "https"
+                    base_url = f"{proto}://{host}"
+        except Exception:
+            pass
         ro_rows = []
         for ro_name, key in sorted(tokens.RO_TOKENS.items()):
             ro_proj_count = len(df_projects[df_projects["RO_Clean"] == ro_name])
