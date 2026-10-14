@@ -188,8 +188,9 @@ def sync_data(gsheet_url_or_id=DEFAULT_GSHEET_URL, force_reload=False):
     df_p.to_parquet(PROJECTS_CACHE, index=False)
     df_m.to_parquet(SURVEYS_CACHE, index=False)
     
-    # Save sync timestamp
-    now_str = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
+    # Save sync timestamp in IST (Indian Standard Time, UTC+5:30)
+    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    now_str = datetime.datetime.now(ist).strftime("%d %b %Y, %I:%M %p IST")
     try:
         import json
         with open(META_CACHE, "w") as f:
